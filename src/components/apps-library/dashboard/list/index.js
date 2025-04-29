@@ -1,17 +1,38 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
+import { AnimatePresence, motion } from "framer-motion";
+
+const formatDateTime = (datetime) => {
+  const dateObj = new Date(datetime);
+  const tanggal = dateObj.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  const jam = dateObj.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "UTC",
+  });
+  return { tanggal, jam };
+};
 
 const FleetTable = () => {
   const [fleetData, setFleetData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("");
-  const [branchFilter, setBranchFilter] = useState("");
+  const [branchFilter, setBranchFilter] = useState("21 Express Pulogadung");
   const [branchKeyword, setBranchKeyword] = useState("");
   const [branchData, setBranchData] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const autoscrollInterval = 30;
+  const timerRef = useRef(null);
+  const animationRef = useRef(null);
 
   useEffect(() => {
     if (!branchKeyword || branchKeyword.length < 3) {
@@ -34,25 +55,27 @@ const FleetTable = () => {
   }, [branchKeyword]);
 
   useEffect(() => {
-    if (!branchFilter) return;
+    if (currentPage === 1 && branchFilter) {
+      fetchFleetData();
+    }
+  }, [currentPage, branchFilter]);
 
-    const fetchFleetData = async () => {
-      setLoading(true);
-      try {
-        const response = await axios.get(
-          `${process.env.REACT_APP_BACKEND_HOST}/masters/fleet?filter_by_col=branch_name&filter_by_text=${branchFilter}`
-        );
-        setFleetData(response.data.express21.results.data || []);
-        setCurrentPage(1);
-      } catch (err) {
-        setError("Failed to fetch fleet data.");
-      } finally {
-        setLoading(false);
-      }
-    };
 
-    fetchFleetData();
-  }, [branchFilter]);
+  const fetchFleetData = async () => {
+    setLoading(true);
+    try {
+      const response = await axios.get(
+        `${process.env.REACT_APP_BACKEND_HOST}/masters/fleet?filter_by_col=branch_name&filter_by_text=${branchFilter}`
+      );
+      setFleetData(response.data.express21.results.data || []);
+      setCurrentPage(1);
+    } catch (err) {
+      setError("Failed to fetch fleet data.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   const handleSuggestionClick = (branch) => {
     setSuggestions([]);
@@ -71,13 +94,40 @@ const FleetTable = () => {
   const currentData = filteredData.slice(indexOfFirstItem, indexOfLastItem);
 
   const handleNextPage = () => {
-    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+      resetTimer();
+    }
   };
 
   const handlePrevPage = () => {
-    if (currentPage > 1) setCurrentPage(currentPage - 1);
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+      resetTimer();
+    }
   };
 
+  const resetTimer = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    
+    timerRef.current = setInterval(() => {
+      setCurrentPage((prevPage) => {
+        const nextPage = prevPage + 1;
+        return nextPage > totalPages ? 1 : nextPage;
+      });
+    }, autoscrollInterval * 1000);
+  };
+
+  useEffect(() => {
+    resetTimer();
+    
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    };
+  }, [filteredData.length, totalPages]);
+  
   return (
     <div className="p-6 bg-gray-100 min-h-screen">
       <div className="bg-white shadow-lg rounded-lg p-6 max-w-screen-xxl mx-auto">
@@ -116,28 +166,64 @@ const FleetTable = () => {
             <table className="min-w-full table-auto border-collapse">
               <thead>
                 <tr className="bg-gray-200 text-gray-600 uppercase text-sm leading-normal">
-                  <th className="py-3 px-6 text-left">Plat Number</th>
-                  <th className="py-3 px-6 text-left">Waktu IN</th>
-                  <th className="py-3 px-6 text-left">Waktu OUT</th>
-                  <th className="py-3 px-6 text-left">Status</th>
-                  <th className="py-3 px-6 text-left">Driver</th>
-                  <th className="py-3 px-6 text-left">Tujuan</th>
-                  <th className="py-3 px-6 text-left">Note</th>
+                  <th className="py-3 px-6 text-center">Plat Number</th>
+                  <th className="py-3 px-6 text-center">Waktu IN</th>
+                  <th className="py-3 px-6 text-center">Waktu OUT</th>
+                  <th className="py-3 px-6 text-center">Status</th>
+                  <th className="py-3 px-6 text-center">Driver</th>
+                  <th className="py-3 px-6 text-center">Tujuan</th>
+                  <th className="py-3 px-6 text-center">Note</th>
                 </tr>
               </thead>
-              <tbody className="text-gray-600 text-sm font-light">
-                {currentData.map((fleet) => (
-                  <tr key={fleet.id} className="border-b border-gray-200 hover:bg-gray-100">
-                    <td className="py-3 px-6 text-left">{fleet.plat_number}</td>
-                    <td className="py-3 px-6 text-left">{fleet.in_time}</td>
-                    <td className="py-3 px-6 text-left">{fleet.out_time}</td>
-                    <td className="py-3 px-6 text-left">{fleet.status_id}</td>
-                    <td className="py-3 px-6 text-left">{fleet.driver}</td>
-                    <td className="py-3 px-6 text-left">{fleet.destination}</td>
-                    <td className="py-3 px-6 text-left">{fleet.note}</td>
-                  </tr>
-                ))}
-              </tbody>
+
+              <AnimatePresence mode="sync">
+                <motion.tbody
+                  key={currentPage}
+                  className="text-gray-600 text-sm font-light"
+                  initial={{ opacity: 0, x: 100 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -100 }}
+                  transition={{ duration: 0.5 }}
+                >
+                  {currentData.map((fleet, index) => (
+                    <motion.tr 
+                      key={fleet.id} 
+                      className="border-b border-gray-200 hover:bg-gray-100"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05, duration: 0.3 }}
+                    >
+                      <td className="py-3 px-6 text-center font-bold">{fleet.plat_number}</td>
+                      <td className="py-3 px-6 text-center">
+                        {fleet.in_time ? (() => {
+                          const { tanggal, jam } = formatDateTime(fleet.in_time);
+                          return (
+                            <div>
+                              <div className="text-sm font-bold">{tanggal}</div>
+                              <div className="text-lg font-bold">{jam}</div>
+                            </div>
+                          );
+                        })() : ""}
+                      </td>
+                      <td className="py-3 px-6 text-center">
+                        {fleet.out_time ? (() => {
+                          const { tanggal, jam } = formatDateTime(fleet.out_time);
+                          return (
+                            <div>
+                              <div className="text-sm font-bold">{tanggal}</div>
+                              <div className="text-lg font-bold">{jam}</div>
+                            </div>
+                          );
+                        })() : ""}
+                      </td>
+                      <td className="py-3 px-6 text-center font-bold">{fleet.status_id}</td>
+                      <td className="py-3 px-6 text-center font-bold">{fleet.driver}</td>
+                      <td className="py-3 px-6 text-center font-bold">{fleet.destination}</td>
+                      <td className="py-3 px-6 text-center font-bold">{fleet.note}</td>
+                    </motion.tr>
+                  ))}
+                </motion.tbody>
+              </AnimatePresence>
             </table>
           </div>
         )}
