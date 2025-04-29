@@ -30,7 +30,7 @@ const FleetTable = () => {
   const [suggestions, setSuggestions] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  const autoscrollInterval = 30;
+  const autoscrollInterval = 20;
   const timerRef = useRef(null);
   const animationRef = useRef(null);
 
